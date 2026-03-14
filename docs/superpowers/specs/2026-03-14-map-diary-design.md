@@ -1,7 +1,7 @@
 # 나의 지도 다이어리 — 설계 문서
 
 **작성일**: 2026-03-14
-**상태**: 승인됨
+**상태**: 승인됨 (리뷰 반영 v2)
 
 ---
 
@@ -43,6 +43,10 @@
 
 URL 라우팅 없이 React state로 바텀 시트 상태 제어.
 
+**상태 관리 전략**: `page.tsx`에서 React `useState`로 전역 상태 관리. 지도 선택 좌표, 활성 바텀 시트 종류, 선택된 장소 ID, 장소 목록 캐시를 관리. 컴포넌트 간 props로 전달 (Zustand 등 외부 라이브러리 미사용 — YAGNI). 컴포넌트 깊이가 깊어지면 Context API로 전환.
+
+**바텀 시트 닫기 방식**: 상단 드래그 핸들을 아래로 스와이프 또는 배경(지도) 탭. touch 이벤트와 지도 스크롤 충돌 방지를 위해 시트 열린 상태에서 지도 터치 이벤트를 비활성화.
+
 ---
 
 ## 데이터 모델 (Supabase)
@@ -61,13 +65,39 @@ URL 라우팅 없이 React state로 바텀 시트 상태 제어.
 | `lng` | float8 | NOT NULL | 경도 |
 | `created_at` | timestamptz | default now() | 생성일시 |
 
+### 테이블 제약 상세
+
+- `category`: DB 레벨 `CHECK (category IN ('맛집', '카페', '산책', '기타'))` 제약 적용
+- `rating`: nullable (선택 항목). 별점 미입력 시 NULL 저장. StarRating 컴포넌트는 0(미선택) 상태 지원
+- `updated_at`: timestamptz, `moddatetime` 트리거로 자동 갱신 (수정 이력 추적)
+
 ### Storage 버킷: `place-photos`
-- 업로드 전 클라이언트에서 1MB 이하로 리사이즈
+- 업로드 전 클라이언트에서 `browser-image-compression` 라이브러리로 1MB 이하 리사이즈
+- iOS Safari에서는 `<input accept="image/*" capture="environment">` 방식 사용 (카메라 직접 연동)
 - 파일명: `{uuid}.{ext}`
+- **의도적 제약**: MVP에서는 사진 1장만 지원. 추후 `place_photos` 별도 테이블로 확장 가능
+
+### Supabase 보안 정책 (RLS)
+
+단일 사용자 개인용 앱 전제 하에 **RLS 비활성화** 방식을 선택한다:
+- `anon` 키는 `.env.local`에만 보관하며 배포 시 외부에 노출되지 않는 환경에서 사용
+- 향후 타인과 공유하거나 퍼블릭 배포 시 Supabase Anonymous Auth로 전환 필요
+
+### 환경 변수 목록
+
+```
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+NEXT_PUBLIC_KAKAO_MAP_APP_KEY=
+```
 
 ---
 
 ## 컴포넌트 구조
+
+**Kakao Map SDK 로딩 전략**: `KakaoMap.tsx`는 `'use client'` 전용 컴포넌트. `next/script`의 `strategy='afterInteractive'`로 SDK를 로드하고, `window.kakao` 준비 후 지도를 초기화. SSR에서는 렌더링하지 않음(`typeof window === 'undefined'` 체크).
+
+**목록 정렬**: 기본 정렬 `created_at DESC`(최신순). MVP에서 페이지네이션 없이 전체 목록 단순 스크롤.
 
 ```
 app/
