@@ -7,6 +7,10 @@ const config: Config = {
   coverageProvider: 'v8',
   testEnvironment: 'jsdom',
   setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
+  // tsconfig paths (@/*) 수동 매핑
+  moduleNameMapper: {
+    '^@/(.*)$': '<rootDir>/$1',
+  },
 }
 
 export default createJestConfig(config)
