@@ -1,65 +1,124 @@
-import Image from "next/image";
+'use client'
 
-export default function Home() {
+import { useState, useEffect, useCallback } from 'react'
+import KakaoMap from '@/components/Map/KakaoMap'
+import BottomSheet from '@/components/BottomSheet/BottomSheet'
+import NewPlaceSheet from '@/components/BottomSheet/NewPlaceSheet'
+import PlaceDetailSheet from '@/components/BottomSheet/PlaceDetailSheet'
+import PlaceListSheet from '@/components/BottomSheet/PlaceListSheet'
+import ToastContainer from '@/components/UI/Toast'
+import useToast from '@/hooks/useToast'
+import { getPlaces } from '@/lib/places'
+import { Place, BottomSheetType } from '@/types/place'
+
+export default function HomePage() {
+  const [places, setPlaces] = useState<Place[]>([])
+  const [activeSheet, setActiveSheet] = useState<BottomSheetType>(null)
+  const { toasts, showToast, dismissToast } = useToast()
+  const [pendingCoord, setPendingCoord] = useState<{ lat: number; lng: number } | null>(null)
+  const [selectedPlace, setSelectedPlace] = useState<Place | null>(null)
+
+  // 초기 데이터 로드
+  useEffect(() => {
+    getPlaces()
+      .then(setPlaces)
+      .catch(() => {
+        showToast('인터넷 연결을 확인해주세요.', 'error')
+      })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const handleMapClick = useCallback((lat: number, lng: number) => {
+    setPendingCoord({ lat, lng })
+    setActiveSheet('new')
+  }, [])
+
+  const handleMarkerClick = useCallback((place: Place) => {
+    setSelectedPlace(place)
+    setActiveSheet('detail')
+  }, [])
+
+  const handlePlaceSaved = useCallback((newPlace: Place) => {
+    setPlaces((prev) => [newPlace, ...prev])
+    setActiveSheet(null)
+    setPendingCoord(null)
+  }, [])
+
+  const handlePlaceDeleted = useCallback((id: string) => {
+    setPlaces((prev) => prev.filter((p) => p.id !== id))
+    setActiveSheet(null)
+    setSelectedPlace(null)
+  }, [])
+
+  const handlePlaceUpdated = useCallback((updated: Place) => {
+    setPlaces((prev) => prev.map((p) => (p.id === updated.id ? updated : p)))
+    setSelectedPlace(updated)
+  }, [])
+
+  const handleClose = useCallback(() => {
+    setActiveSheet(null)
+    setPendingCoord(null)
+    setSelectedPlace(null)
+  }, [])
+
+  const handleSelectFromList = useCallback((place: Place) => {
+    setSelectedPlace(place)
+    setActiveSheet('detail')
+  }, [])
+
+  const isSheetOpen = activeSheet !== null
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
-  );
+    <main className="relative w-screen h-screen overflow-hidden">
+      {/* 토스트 알림 */}
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+
+      {/* 지도 전체화면 */}
+      <KakaoMap
+        places={places}
+        onMapClick={handleMapClick}
+        onMarkerClick={handleMarkerClick}
+        disabled={isSheetOpen}
+      />
+
+      {/* 우하단 FAB: 내 장소 목록 */}
+      <button
+        type="button"
+        aria-label="내 장소 목록"
+        onClick={() => setActiveSheet('list')}
+        className="fixed bottom-6 right-4 z-30 w-14 h-14 bg-white rounded-full shadow-lg flex items-center justify-center text-2xl hover:bg-gray-50 transition-colors"
+      >
+        🗺️
+      </button>
+
+      {/* 바텀 시트: 새 장소 등록 */}
+      <BottomSheet isOpen={activeSheet === 'new'} onClose={handleClose} title="새 장소 등록">
+        {pendingCoord && (
+          <NewPlaceSheet
+            lat={pendingCoord.lat}
+            lng={pendingCoord.lng}
+            onSave={handlePlaceSaved}
+            onClose={handleClose}
+          />
+        )}
+      </BottomSheet>
+
+      {/* 바텀 시트: 장소 상세 */}
+      <BottomSheet isOpen={activeSheet === 'detail'} onClose={handleClose} title="장소 정보">
+        {selectedPlace && (
+          <PlaceDetailSheet
+            place={selectedPlace}
+            onUpdate={handlePlaceUpdated}
+            onDelete={handlePlaceDeleted}
+            onClose={handleClose}
+          />
+        )}
+      </BottomSheet>
+
+      {/* 바텀 시트: 내 장소 목록 */}
+      <BottomSheet isOpen={activeSheet === 'list'} onClose={handleClose} title="내 장소 목록">
+        <PlaceListSheet places={places} onSelectPlace={handleSelectFromList} />
+      </BottomSheet>
+    </main>
+  )
 }
